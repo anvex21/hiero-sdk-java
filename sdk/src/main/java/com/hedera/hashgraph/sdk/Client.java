@@ -532,10 +532,28 @@ public final class Client implements AutoCloseable {
     /**
      * Replace all nodes in this Client with the nodes in the Address Book
      * and update the address book if necessary.
-     *
-     * @param addressBook A list of nodes and their metadata
      * @return {@code this}
      */
+
+    //initiate addressbook query and update the client's network, this will make the SDK client has the latest node account ids for any subsequent transactions
+    CompletableFuture<Void> updateNetworkFromAddressBookAsync() {
+        var fileId = FileId.getAddressBookFileIdFor(this.shard, this.realm); // gets the file where the address book is
+        return new AddressBookQuery() // gets the latest address book file
+            .setFileId(fileId)
+            .executeAsync(this)
+            .thenCompose(addressBook -> { // when the query succeeds
+                try{
+                    this.setNetworkFromAddressBook(addressBook);
+                    return CompletableFuture.completedFuture(null);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return CompletableFuture.failedFuture(e);
+                } catch (TimeoutException e) {
+                    return CompletableFuture.failedFuture(e);
+                }
+            });
+    }
+
     public synchronized Client setNetworkFromAddressBook(NodeAddressBook addressBook)
             throws InterruptedException, TimeoutException {
         network.setNetwork(Network.addressBookToNetwork(addressBook.nodeAddresses));

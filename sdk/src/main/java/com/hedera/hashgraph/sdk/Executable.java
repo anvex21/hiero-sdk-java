@@ -75,6 +75,12 @@ abstract class Executable<SdkRequestT, ProtoRequestT extends MessageLite, Respon
     protected LockableList<Node> nodes = new LockableList<>();
 
     /**
+     * Client used for the most recent execution attempt.
+     */
+    @Nullable
+    private Client executingClient;
+
+    /**
      * Indicates if the request has been attempted to be sent to all nodes
      */
     protected boolean attemptedAllNodes = false;
@@ -91,6 +97,11 @@ abstract class Executable<SdkRequestT, ProtoRequestT extends MessageLite, Respon
             (grpcRequest) -> ClientCalls.blockingUnaryCall(grpcRequest.createCall(), grpcRequest.getRequest());
 
     private java.util.function.Function<ResponseT, ResponseT> responseListener;
+
+    // function pointer -> updateNetworkFromAddressBookAsync() from Client; it allows Executable to update the network
+    @VisibleForTesting
+    java.util.function.Function<Client, CompletableFuture<Void>> networkUpdateHandler =
+        Client::updateNetworkFromAddressBookAsync;
 
     Executable() {
         requestListener = request -> {
@@ -390,7 +401,7 @@ abstract class Executable<SdkRequestT, ProtoRequestT extends MessageLite, Respon
                 throw new TimeoutException();
             }
 
-            GrpcRequest grpcRequest = new GrpcRequest(client.network, attempt, currentTimeout);
+            GrpcRequest grpcRequest = new GrpcRequest(client, client.network, attempt, currentTimeout);
             Node node = grpcRequest.getNode();
             ResponseT response = null;
 
@@ -590,6 +601,7 @@ abstract class Executable<SdkRequestT, ProtoRequestT extends MessageLite, Respon
     @SuppressWarnings("java:S2245")
     @VisibleForTesting
     void setNodesFromNodeAccountIds(Client client) {
+        executingClient = client;
         nodes.clear();
 
         // When a single node is explicitly set we get all of its proxies so in case of
@@ -712,7 +724,7 @@ abstract class Executable<SdkRequestT, ProtoRequestT extends MessageLite, Respon
         var timeoutTime = Instant.now().plus(timeout);
 
         GrpcRequest grpcRequest =
-                new GrpcRequest(client.network, attempt, Duration.between(Instant.now(), timeoutTime));
+                new GrpcRequest(client, client.network, attempt, Duration.between(Instant.now(), timeoutTime));
 
         Supplier<CompletableFuture<Void>> afterUnhealthyDelay = () -> {
             return grpcRequest.getNode().isHealthy()
@@ -813,8 +825,11 @@ abstract class Executable<SdkRequestT, ProtoRequestT extends MessageLite, Respon
 
     abstract ProtoRequestT makeRequest();
 
+    // Creates a new grpc request for an attempt, passes the executing client and its network configuration; purpose: creating grpc requests
     GrpcRequest getGrpcRequest(int attempt) {
-        return new GrpcRequest(null, attempt, this.grpcDeadline);
+
+        Network network = executingClient != null ? executingClient.network : null;
+        return new GrpcRequest(executingClient, network, attempt, this.grpcDeadline);
     }
 
     void advanceRequest() {
@@ -868,6 +883,7 @@ abstract class Executable<SdkRequestT, ProtoRequestT extends MessageLite, Respon
             case PLATFORM_NOT_ACTIVE:
                 return ExecutionState.SERVER_ERROR;
             case BUSY:
+            case INVALID_ACCOUNT_ID:
                 return ExecutionState.RETRY;
             case OK:
                 return ExecutionState.SUCCESS;
@@ -880,7 +896,8 @@ abstract class Executable<SdkRequestT, ProtoRequestT extends MessageLite, Respon
     class GrpcRequest {
         @Nullable
         private final Network network;
-
+        @Nullable
+        private final Client client;
         private final Node node;
         private final int attempt;
         // private final ClientCall<ProtoRequestT, ResponseT> call;
@@ -892,7 +909,9 @@ abstract class Executable<SdkRequestT, ProtoRequestT extends MessageLite, Respon
         private double latency;
         private Status responseStatus;
 
-        GrpcRequest(@Nullable Network network, int attempt, Duration grpcDeadline) {
+        // Pass client
+        GrpcRequest(@Nullable Client client, @Nullable Network network, int attempt, Duration grpcDeadline) {
+            this.client = client;
             this.network = network;
             this.attempt = attempt;
             this.grpcDeadline = grpcDeadline;
@@ -973,11 +992,20 @@ abstract class Executable<SdkRequestT, ProtoRequestT extends MessageLite, Respon
             return Executable.this.mapResponse(response, node.getAccountId(), request);
         }
 
+        // Keeps the response and the status; Add special handling in the RETRY execution state for INVALID_NODE_ACCOUNT_ID: mark the node as unusable by increasing it's backoff
         void handleResponse(ResponseT response, Status status, ExecutionState executionState) {
-            node.decreaseBackoff();
+            //node.decreaseBackoff();
 
             this.response = Executable.this.responseListener.apply(response);
             this.responseStatus = status;
+
+            if (status == Status.INVALID_NODE_ACCOUNT_ID) {
+                markNodeAsUnhealthy();
+                refreshNetworkConfiguration(); // Refreshes the address book
+            } else {
+                node.decreaseBackoff();
+            }
+
 
             logger.trace(
                     "Received {} response in {} s from node {} during attempt #{}: {}",
@@ -993,12 +1021,19 @@ abstract class Executable<SdkRequestT, ProtoRequestT extends MessageLite, Respon
             }
             switch (executionState) {
                 case RETRY -> {
-                    logger.warn(
+                    if (status == Status.INVALID_NODE_ACCOUNT_ID) {
+                        logger.warn(
+                            "Encountered INVALID_NODE_ACCOUNT_ID for node {} during attempt #{}. Refreshing network configuration before retrying.",
+                            node.getAccountId(),
+                            attempt);
+                    } else {
+                        logger.warn(
                             "Retrying in {} ms after failure with node {} during attempt #{}: {}",
                             delay,
                             node.getAccountId(),
                             attempt,
                             responseStatus);
+                    }
                     verboseLog(node);
                 }
                 case SERVER_ERROR -> logger.warn(
@@ -1009,6 +1044,41 @@ abstract class Executable<SdkRequestT, ProtoRequestT extends MessageLite, Respon
                 default -> {}
             }
         }
+
+        // mark the node as unusable by increasing it's backoff and removing it from the healthy nodes list
+        private void markNodeAsUnhealthy() {
+            if (network != null) {
+                network.increaseBackoff(node); // this node wont be selected in upcoming transactions
+            } else {
+                node.increaseBackoff();
+            }
+            verboseLog(node);
+        }
+
+        // update the client's network
+        private void refreshNetworkConfiguration() {
+            if (client == null) {
+                return; // no client -> cannot be updated
+            }
+
+            CompletableFuture<Void> updateFuture;
+            try {
+                updateFuture = networkUpdateHandler.apply(client); // Refreshes the AddressBook
+            } catch (Throwable error) {
+                logger.warn("Failed to refresh address book after INVALID_NODE_ACCOUNT_ID", error);
+                return;
+            }
+
+            if (updateFuture == null) {
+                return;
+            }
+
+            updateFuture.exceptionally(error -> {
+                logger.warn("Failed to refresh address book after INVALID_NODE_ACCOUNT_ID", error);
+                return null;
+            });
+        }
+
 
         void verboseLog(Node node) {
             String ipAddress;
