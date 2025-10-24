@@ -100,8 +100,8 @@ abstract class Executable<SdkRequestT, ProtoRequestT extends MessageLite, Respon
 
     // function pointer -> updateNetworkFromAddressBookAsync() from Client; it allows Executable to update the network
     @VisibleForTesting
-    java.util.function.Function<Client, CompletableFuture<Void>> networkUpdateHandler =
-        Client::updateNetworkFromAddressBookAsync;
+    java.util.function.Function<Client, Client> networkUpdateHandler =
+        Client::updateNetworkFromAddressBook;
 
     Executable() {
         requestListener = request -> {
@@ -1058,25 +1058,15 @@ abstract class Executable<SdkRequestT, ProtoRequestT extends MessageLite, Respon
         // update the client's network
         private void refreshNetworkConfiguration() {
             if (client == null) {
-                return; // no client -> cannot be updated
+                return;
             }
 
-            CompletableFuture<Void> updateFuture;
             try {
-                updateFuture = networkUpdateHandler.apply(client); // Refreshes the AddressBook
+                networkUpdateHandler.apply(client);
+                logger.info("Network refreshed synchronously after INVALID_NODE_ACCOUNT_ID");
             } catch (Throwable error) {
                 logger.warn("Failed to refresh address book after INVALID_NODE_ACCOUNT_ID", error);
-                return;
             }
-
-            if (updateFuture == null) {
-                return;
-            }
-
-            updateFuture.exceptionally(error -> {
-                logger.warn("Failed to refresh address book after INVALID_NODE_ACCOUNT_ID", error);
-                return null;
-            });
         }
 
 

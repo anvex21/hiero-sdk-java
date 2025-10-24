@@ -536,22 +536,25 @@ public final class Client implements AutoCloseable {
      */
 
     //initiate addressbook query and update the client's network, this will make the SDK client has the latest node account ids for any subsequent transactions
-    CompletableFuture<Void> updateNetworkFromAddressBookAsync() {
+    public synchronized Client updateNetworkFromAddressBook() {
         var fileId = FileId.getAddressBookFileIdFor(this.shard, this.realm); // gets the file where the address book is
-        return new AddressBookQuery() // gets the latest address book file
-            .setFileId(fileId)
-            .executeAsync(this)
-            .thenCompose(addressBook -> { // when the query succeeds
-                try{
-                    this.setNetworkFromAddressBook(addressBook);
-                    return CompletableFuture.completedFuture(null);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    return CompletableFuture.failedFuture(e);
-                } catch (TimeoutException e) {
-                    return CompletableFuture.failedFuture(e);
-                }
-            });
+        try {
+            var addressBook = new AddressBookQuery()
+                .setFileId(fileId)
+                .execute(this); // блокира докато mirror node не върне резултат
+
+            this.setNetworkFromAddressBook(addressBook);
+            logger.info("Network updated from address book synchronously.");
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            logger.warn("Interrupted while updating network", e);
+        } catch (TimeoutException e) {
+            logger.warn("Timeout while updating network", e);
+        } catch (Exception e) {
+            logger.warn("Failed to update network from address book", e);
+        }
+
+        return this;
     }
 
     public synchronized Client setNetworkFromAddressBook(NodeAddressBook addressBook)
