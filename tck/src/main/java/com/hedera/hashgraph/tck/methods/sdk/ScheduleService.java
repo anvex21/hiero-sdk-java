@@ -104,7 +104,7 @@ public class ScheduleService extends AbstractJSONRPC2Service {
             }
         }
 
-        return new ScheduleResponse(scheduleId, transactionId, receipt.status);
+       return new ScheduleResponse(scheduleId, transactionId, receipt.status);
     }
 
 
@@ -122,12 +122,17 @@ public class ScheduleService extends AbstractJSONRPC2Service {
         TransactionResponse txResponse = transaction.execute(sdkService.getClient());
         TransactionReceipt receipt = txResponse.getReceipt(sdkService.getClient());
 
-        String scheduleId = "";
-        if (receipt.status == Status.SUCCESS) {
-            scheduleId = params.getScheduleId().orElse("");
+        String scheduleId = params.getScheduleId().orElse("");
+        if (receipt.status == Status.SUCCESS && receipt.scheduleId != null) {
+            scheduleId = receipt.scheduleId.toString();
         }
 
-        return new ScheduleResponse(scheduleId, "", receipt.status);
+        String transactionId = "";
+        if (receipt.transactionId != null) {
+            transactionId = receipt.transactionId.toString();
+        }
+
+        return new ScheduleResponse(scheduleId, transactionId, receipt.status);
     }
     /**
      * Builds a scheduled transaction from method name and parameters
