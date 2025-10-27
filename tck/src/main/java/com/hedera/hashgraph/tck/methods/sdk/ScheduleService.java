@@ -6,6 +6,7 @@ import com.hedera.hashgraph.tck.annotation.JSONRPC2Method;
 import com.hedera.hashgraph.tck.annotation.JSONRPC2Service;
 import com.hedera.hashgraph.tck.methods.AbstractJSONRPC2Service;
 import com.hedera.hashgraph.tck.methods.sdk.param.schedule.ScheduleCreateParams;
+import com.hedera.hashgraph.tck.methods.sdk.param.schedule.ScheduleDeleteParams;
 import com.hedera.hashgraph.tck.methods.sdk.param.schedule.ScheduleSignParams;
 import com.hedera.hashgraph.tck.methods.sdk.response.ScheduleResponse;
 import com.hedera.hashgraph.tck.util.KeyUtils;
@@ -106,6 +107,28 @@ public class ScheduleService extends AbstractJSONRPC2Service {
         return new ScheduleResponse(scheduleId, transactionId, receipt.status);
     }
 
+
+    @JSONRPC2Method("deleteSchedule")
+    public ScheduleResponse deleteSchedule(final ScheduleDeleteParams params) throws Exception {
+        ScheduleDeleteTransaction transaction =
+            new ScheduleDeleteTransaction().setGrpcDeadline(DEFAULT_GRPC_DEADLINE);
+
+        params.getScheduleId()
+            .ifPresent(scheduleIdStr -> transaction.setScheduleId(ScheduleId.fromString(scheduleIdStr)));
+
+        params.getCommonTransactionParams()
+            .ifPresent(common -> common.fillOutTransaction(transaction, sdkService.getClient()));
+
+        TransactionResponse txResponse = transaction.execute(sdkService.getClient());
+        TransactionReceipt receipt = txResponse.getReceipt(sdkService.getClient());
+
+        String scheduleId = "";
+        if (receipt.status == Status.SUCCESS) {
+            scheduleId = params.getScheduleId().orElse("");
+        }
+
+        return new ScheduleResponse(scheduleId, "", receipt.status);
+    }
     /**
      * Builds a scheduled transaction from method name and parameters
      */
