@@ -1,79 +1,211 @@
+// SPDX-License-Identifier: Apache-2.0
 package com.hedera.hashgraph.sdk;
 
+import com.google.common.base.MoreObjects;
+import com.google.protobuf.InvalidProtocolBufferException;
 import java.util.Objects;
+import javax.annotation.Nullable;
 
 /**
  * The extra fee charged for the transaction.
+ * <p>
+ * Represents additional fees that apply for specific fee components,
+ * such as charges beyond included amounts.
  */
 public final class FeeExtra {
-    /** The unique name of this extra fee. */
-    public final String name;
-    /** The count that is included for free. */
-    public final long included;
-    /** The actual count of items. */
-    public final long count;
-    /** The charged count after subtracting the included value. */
-    public final long charged;
-    /** The fee price per unit in tinycents. */
-    public final long feePerUnit;
-    /** The subtotal of this extra in tinycents. */
-    public final long subtotal;
+    /**
+     * The charged count of items as calculated by max(0, count - included).
+     */
+    private final int charged;
 
-    private FeeExtra(String name, long included, long count, long charged, long feePerUnit, long subtotal) {
-        this.name = Objects.requireNonNull(name, "name must not be null");
-        this.included = included;
-        this.count = count;
+    /**
+     * The actual count of items received.
+     */
+    private final int count;
+
+    /**
+     * The fee price per unit in tinycents.
+     */
+    private final long feePerUnit;
+
+    /**
+     * The count of this "extra" that is included for free.
+     */
+    private final int included;
+
+    /**
+     * The unique name of this extra fee as defined in the fee schedule.
+     */
+    @Nullable
+    private final String name;
+
+    /**
+     * The subtotal in tinycents for this extra fee.
+     * <p>
+     * Calculated by multiplying the charged count by the fee_per_unit.
+     */
+    private final long subtotal;
+
+    /**
+     * Constructor.
+     *
+     * @param charged    the charged count of items
+     * @param count      the actual count of items
+     * @param feePerUnit the fee price per unit in tinycents
+     * @param included   the count included for free
+     * @param name       the unique name of this extra fee
+     * @param subtotal   the subtotal in tinycents
+     */
+    FeeExtra(int charged, int count, long feePerUnit, int included, @Nullable String name, long subtotal) {
         this.charged = charged;
+        this.count = count;
         this.feePerUnit = feePerUnit;
+        this.included = included;
+        this.name = name;
         this.subtotal = subtotal;
     }
 
-    static FeeExtra fromProtobuf(com.hedera.hashgraph.sdk.proto.mirror.FeeExtra proto) {
+    /**
+     * Create a FeeExtra from a protobuf.
+     *
+     * @param feeExtra the protobuf
+     * @return the new FeeExtra
+     */
+    static FeeExtra fromProtobuf(com.hedera.hashgraph.sdk.proto.mirror.FeeExtra feeExtra) {
         return new FeeExtra(
-            proto.getName(),
-            Integer.toUnsignedLong(proto.getIncluded()),
-            Integer.toUnsignedLong(proto.getCount()),
-            Integer.toUnsignedLong(proto.getCharged()),
-            proto.getFeePerUnit(),
-            proto.getSubtotal());
+                feeExtra.getCharged(),
+                feeExtra.getCount(),
+                feeExtra.getFeePerUnit(),
+                feeExtra.getIncluded(),
+                feeExtra.getName().isEmpty() ? null : feeExtra.getName(),
+                feeExtra.getSubtotal());
     }
 
+    /**
+     * Create a FeeExtra from a byte array.
+     *
+     * @param bytes the byte array
+     * @return the new FeeExtra
+     * @throws InvalidProtocolBufferException when there is an issue with the protobuf
+     */
+    public static FeeExtra fromBytes(byte[] bytes) throws InvalidProtocolBufferException {
+        return fromProtobuf(com.hedera.hashgraph.sdk.proto.mirror.FeeExtra.parseFrom(bytes).toBuilder()
+                .build());
+    }
+    /**
+     * Extract the charged count of items.
+     *
+     * @return the charged count of items
+     */
+    public int getCharged() {
+        return charged;
+    }
+
+    /**
+     * Extract the actual count of items.
+     *
+     * @return the actual count of items
+     */
+    public int getCount() {
+        return count;
+    }
+
+    /**
+     * Extract the fee price per unit in tinycents.
+     *
+     * @return the fee price per unit in tinycents
+     */
+    public long getFeePerUnit() {
+        return feePerUnit;
+    }
+
+    /**
+     * Extract the count included for free.
+     *
+     * @return the count included for free
+     */
+    public int getIncluded() {
+        return included;
+    }
+
+    /**
+     * Extract the unique name of this extra fee.
+     *
+     * @return the unique name of this extra fee, or null if not set
+     */
+    @Nullable
+    public String getName() {
+        return name;
+    }
+
+    /**
+     * Extract the subtotal in tinycents.
+     *
+     * @return the subtotal in tinycents
+     */
+    public long getSubtotal() {
+        return subtotal;
+    }
+
+    /**
+     * Convert the fee extra to a protobuf.
+     *
+     * @return the protobuf
+     */
     com.hedera.hashgraph.sdk.proto.mirror.FeeExtra toProtobuf() {
-        return com.hedera.hashgraph.sdk.proto.mirror.FeeExtra.newBuilder()
-            .setName(name)
-            .setIncluded((int) included)
-            .setCount((int) count)
-            .setCharged((int) charged)
-            .setFeePerUnit(feePerUnit)
-            .setSubtotal(subtotal)
-            .build();
+        var builder = com.hedera.hashgraph.sdk.proto.mirror.FeeExtra.newBuilder()
+                .setCharged(charged)
+                .setCount(count)
+                .setFeePerUnit(feePerUnit)
+                .setIncluded(included)
+                .setSubtotal(subtotal);
+
+        if (name != null) {
+            builder.setName(name);
+        }
+
+        return builder.build();
     }
 
-    FeeExtra aggregate(FeeExtra other) {
-        if (!name.equals(other.name)) {
-            throw new IllegalArgumentException("Cannot aggregate FeeExtra with different names");
-        }
-        if (feePerUnit != other.feePerUnit) {
-            throw new IllegalArgumentException("Cannot aggregate FeeExtra with different feePerUnit values");
-        }
-
-        long totalCount = Math.addExact(count, other.count);
-        long totalCharged = Math.addExact(charged, other.charged);
-        long totalSubtotal = Math.addExact(subtotal, other.subtotal);
-        long inferredIncluded = Math.max(0L, totalCount - totalCharged);
-
-        return new FeeExtra(name, inferredIncluded, totalCount, totalCharged, feePerUnit, totalSubtotal);
+    /**
+     * Convert the fee extra to a byte array.
+     *
+     * @return the byte array
+     */
+    public byte[] toBytes() {
+        return toProtobuf().toByteArray();
     }
 
     @Override
     public String toString() {
-        return "FeeExtra{"
-            + "name='" + name + '\''
-            + ", included=" + included
-            + ", count=" + count
-            + ", charged=" + charged
-            + ", feePerUnit=" + feePerUnit
-            + ", subtotal=" + subtotal
-            + '}';
+        return MoreObjects.toStringHelper(this)
+                .add("charged", charged)
+                .add("count", count)
+                .add("feePerUnit", feePerUnit)
+                .add("included", included)
+                .add("name", name)
+                .add("subtotal", subtotal)
+                .toString();
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof FeeExtra that)) {
+            return false;
+        }
+        return charged == that.charged
+                && count == that.count
+                && feePerUnit == that.feePerUnit
+                && included == that.included
+                && subtotal == that.subtotal
+                && Objects.equals(name, that.name);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(charged, count, feePerUnit, included, name, subtotal);
     }
 }
