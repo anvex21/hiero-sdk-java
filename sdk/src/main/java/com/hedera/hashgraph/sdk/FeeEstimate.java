@@ -27,7 +27,7 @@ public final class FeeEstimate {
         return new FeeEstimate(proto.getBase(), extras);
     }
 
-    long subtotal() {
+    public long subtotal() {
         long subtotal = base;
         for (var extra : extras) {
             subtotal = Math.addExact(subtotal, extra.subtotal);
