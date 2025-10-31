@@ -6,6 +6,7 @@ module com.hedera.hashgraph.sdk.test.integration {
     requires org.bouncycastle.provider;
     requires org.junit.jupiter.api;
     requires static java.annotation;
+    requires io.grpc;
 
     opens com.hedera.hashgraph.sdk.test.integration;
 }
