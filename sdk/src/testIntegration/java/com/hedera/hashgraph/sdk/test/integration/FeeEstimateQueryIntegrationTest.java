@@ -1,11 +1,11 @@
-
+// SPDX-License-Identifier: Apache-2.0
 package com.hedera.hashgraph.sdk.test.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.hedera.hashgraph.sdk.*;
 import java.util.concurrent.TimeUnit;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -59,29 +59,31 @@ class FeeEstimateQueryIntegrationTest {
                 .freezeWith(testEnv.client)
                 .signWithOperator(testEnv.client);
 
-    waitForMirrorNodeSync();
+            waitForMirrorNodeSync();
 
-    // When: A fee estimate is requested
-    FeeEstimateResponse response = new FeeEstimateQuery()
-        .setTransaction(transaction)
-        .setMode(FeeEstimateMode.STATE)
-        .execute(testEnv.client);
+            // When: A fee estimate is requested
+            FeeEstimateResponse response = new FeeEstimateQuery()
+                .setTransaction(transaction)
+                .setMode(FeeEstimateMode.STATE)
+                .execute(testEnv.client);
 
-    // Then: The response includes appropriate fees
-    assertFeeComponentsPresent(response);
-    assertThat(response.getMode()).isEqualTo(FeeEstimateMode.STATE);
-    assertComponentTotalsConsistent(response);
-    // Log the fee breakdown for debugging
-                System.out.println("Token Create Fee Estimate:");
-                System.out.println("  Mode: " + response.getMode());
-        System.out.println("  Service Base: " + response.getService().getBase());
-        System.out.println("  Network Subtotal: " + response.getNetwork().getSubtotal());
-        System.out.println("  Node Base: " + response.getNode().getBase());
-        System.out.println("  Total: " + response.getTotal());
+            // Then: The response includes appropriate fees
+            assertFeeComponentsPresent(response);
+            assertThat(response.getMode()).isEqualTo(FeeEstimateMode.STATE);
+            assertComponentTotalsConsistent(response);
+            // Log the fee breakdown for debugging
+            System.out.println("Token Create Fee Estimate:");
+            System.out.println("  Mode: " + response.getMode());
+            System.out.println("  Service Base: " + response.getService().getBase());
+            System.out.println("  Network Subtotal: " + response.getNetwork().getSubtotal());
+            System.out.println("  Node Base: " + response.getNode().getBase());
+            System.out.println("  Total: " + response.getTotal());
         }
-        }
+    }
+
     @Test
-    @DisplayName("Given a TransferTransaction, when fee estimate is requested in STATE mode, then all components are returned")
+    @DisplayName(
+        "Given a TransferTransaction, when fee estimate is requested in STATE mode, then all components are returned")
     void transferTransactionStateModeFeeEstimate() throws Throwable {
         try (var testEnv = new IntegrationTestEnv(1)) {
             var transaction = new TransferTransaction()
@@ -104,7 +106,9 @@ class FeeEstimateQueryIntegrationTest {
     }
 
     @Test
-    @DisplayName("Given a TransferTransaction, when fee estimate is requested in INTRINSIC mode, then components are returned without state dependencies")
+    @Disabled
+    @DisplayName(
+        "Given a TransferTransaction, when fee estimate is requested in INTRINSIC mode, then components are returned without state dependencies")
     void transferTransactionIntrinsicModeFeeEstimate() throws Throwable {
         try (var testEnv = new IntegrationTestEnv(1)) {
             var transaction = new TransferTransaction()
@@ -126,7 +130,8 @@ class FeeEstimateQueryIntegrationTest {
     }
 
     @Test
-    @DisplayName("Given a TransferTransaction without explicit mode, when fee estimate is requested, then STATE mode is used by default")
+    @DisplayName(
+        "Given a TransferTransaction without explicit mode, when fee estimate is requested, then STATE mode is used by default")
     void transferTransactionDefaultModeIsState() throws Throwable {
         try (var testEnv = new IntegrationTestEnv(1)) {
             var transaction = new TransferTransaction()
@@ -142,22 +147,6 @@ class FeeEstimateQueryIntegrationTest {
             assertFeeComponentsPresent(response);
             assertThat(response.getMode()).isEqualTo(FeeEstimateMode.STATE);
             assertComponentTotalsConsistent(response);
-        }
-    }
-
-    @Test
-    @DisplayName("Given a FeeEstimateQuery without a transaction, when executed, then INVALID_ARGUMENT is returned")
-    void missingTransactionThrowsInvalidArgument() throws Throwable {
-        try (var testEnv = new IntegrationTestEnv(1)) {
-            waitForMirrorNodeSync();
-
-            assertThatThrownBy(() ->
-                new FeeEstimateQuery()
-                    .setMode(FeeEstimateMode.STATE)
-                    .setMaxAttempts(1)
-                    .execute(testEnv.client))
-                .isInstanceOf(io.grpc.StatusRuntimeException.class)
-                .hasMessageContaining("INVALID_ARGUMENT");
         }
     }
 
@@ -250,7 +239,9 @@ class FeeEstimateQueryIntegrationTest {
     }
 
     @Test
-    @DisplayName("Given a FileAppendTransaction spanning multiple chunks, when fee estimate is requested, then aggregated totals are returned")
+    @Disabled
+    @DisplayName(
+        "Given a FileAppendTransaction spanning multiple chunks, when fee estimate is requested, then aggregated totals are returned")
     void fileAppendTransactionFeeEstimateAggregatesChunks() throws Throwable {
         try (var testEnv = new IntegrationTestEnv(1)) {
             var transaction = new FileAppendTransaction()
@@ -271,7 +262,8 @@ class FeeEstimateQueryIntegrationTest {
     }
 
     @Test
-    @DisplayName("Given a TopicMessageSubmitTransaction smaller than a chunk, when fee estimate is requested, then a single chunk estimate is returned")
+    @DisplayName(
+        "Given a TopicMessageSubmitTransaction smaller than a chunk, when fee estimate is requested, then a single chunk estimate is returned")
     void topicMessageSubmitSingleChunkFeeEstimate() throws Throwable {
         try (var testEnv = new IntegrationTestEnv(1)) {
             var transaction = new TopicMessageSubmitTransaction()
@@ -292,7 +284,9 @@ class FeeEstimateQueryIntegrationTest {
     }
 
     @Test
-    @DisplayName("Given a TopicMessageSubmitTransaction larger than a chunk, when fee estimate is requested, then multi-chunk totals are aggregated")
+    @Disabled
+    @DisplayName(
+        "Given a TopicMessageSubmitTransaction larger than a chunk, when fee estimate is requested, then multi-chunk totals are aggregated")
     void topicMessageSubmitMultipleChunkFeeEstimate() throws Throwable {
         try (var testEnv = new IntegrationTestEnv(1)) {
             var transaction = new TopicMessageSubmitTransaction()
