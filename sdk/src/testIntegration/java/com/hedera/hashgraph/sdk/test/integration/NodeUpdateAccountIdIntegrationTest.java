@@ -127,9 +127,9 @@ class NodeUpdateAccountIdIntegrationTest {
             var newAccountKey = PrivateKey.generateED25519();
 
             // Submit to node 3 and node 4
-            // Node 3 will fail with INVALID_NODE_ACCOUNT_ID (because it now uses newNodeAccountID)
+            // Node 3 will fail with INVALID_NODE_ACCOUNT (because it now uses newNodeAccountID)
             // The SDK should automatically:
-            // 1. Detect INVALID_NODE_ACCOUNT_ID error
+            // 1. Detect INVALID_NODE_ACCOUNT error
             // 2. Advance to next node
             // 3. Update the address book asynchronously
             // 4. Mark node 3 as unhealthy
