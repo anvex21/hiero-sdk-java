@@ -542,14 +542,16 @@ class ExecutableTest {
         var tx = new DummyTransaction() {
             @Override
             Status mapResponseStatus(com.hedera.hashgraph.sdk.proto.TransactionResponse response) {
-                return Status.INVALID_NODE_ACCOUNT_ID;
+                //return Status.INVALID_NODE_ACCOUNT_ID;
+                return Status.INVALID_NODE_ACCOUNT;
             }
         };
         var nodeAccountIds = Arrays.asList(new AccountId(0, 0, 3), new AccountId(0, 0, 4), new AccountId(0, 0, 5));
         tx.setNodeAccountIds(nodeAccountIds);
 
         var txResp = com.hedera.hashgraph.sdk.proto.TransactionResponse.newBuilder()
-            .setNodeTransactionPrecheckCode(ResponseCodeEnum.INVALID_NODE_ACCOUNT_ID)
+            //.setNodeTransactionPrecheckCode(ResponseCodeEnum.INVALID_NODE_ACCOUNT_ID)
+            .setNodeTransactionPrecheckCode(ResponseCodeEnum.INVALID_NODE_ACCOUNT)
             .build();
 
         tx.blockingUnaryCall = (grpcRequest) -> txResp;
@@ -569,14 +571,16 @@ class ExecutableTest {
         var tx = new DummyTransaction() {
             @Override
             Status mapResponseStatus(com.hedera.hashgraph.sdk.proto.TransactionResponse response) {
-                return Status.INVALID_NODE_ACCOUNT_ID;
+                // return Status.INVALID_NODE_ACCOUNT_ID;
+                return Status.INVALID_NODE_ACCOUNT;
             }
         };
         var nodeAccountIds = Arrays.asList(new AccountId(0, 0, 3));
         tx.setNodeAccountIds(nodeAccountIds);
 
         var txResp = com.hedera.hashgraph.sdk.proto.TransactionResponse.newBuilder()
-            .setNodeTransactionPrecheckCode(ResponseCodeEnum.INVALID_NODE_ACCOUNT_ID)
+            //.setNodeTransactionPrecheckCode(ResponseCodeEnum.INVALID_NODE_ACCOUNT_ID)
+            .setNodeTransactionPrecheckCode(ResponseCodeEnum.INVALID_NODE_ACCOUNT)
             .build();
 
         tx.blockingUnaryCall = (grpcRequest) -> txResp;
