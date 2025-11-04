@@ -45,7 +45,7 @@ abstract class Executable<SdkRequestT, ProtoRequestT extends MessageLite, Respon
     protected static final Random random = new Random();
 
     static final Pattern RST_STREAM =
-            Pattern.compile(".*\\brst[^0-9a-zA-Z]stream\\b.*", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+        Pattern.compile(".*\\brst[^0-9a-zA-Z]stream\\b.*", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
     /**
      * The maximum times execution will be attempted
      */
@@ -75,12 +75,6 @@ abstract class Executable<SdkRequestT, ProtoRequestT extends MessageLite, Respon
     protected LockableList<Node> nodes = new LockableList<>();
 
     /**
-     * Client used for the most recent execution attempt.
-     */
-    @Nullable
-    private Client executingClient;
-
-    /**
      * Indicates if the request has been attempted to be sent to all nodes
      */
     protected boolean attemptedAllNodes = false;
@@ -94,14 +88,9 @@ abstract class Executable<SdkRequestT, ProtoRequestT extends MessageLite, Respon
     // Lambda responsible for executing synchronous gRPC requests. Pluggable for unit testing.
     @VisibleForTesting
     Function<GrpcRequest, ResponseT> blockingUnaryCall =
-            (grpcRequest) -> ClientCalls.blockingUnaryCall(grpcRequest.createCall(), grpcRequest.getRequest());
+        (grpcRequest) -> ClientCalls.blockingUnaryCall(grpcRequest.createCall(), grpcRequest.getRequest());
 
     private java.util.function.Function<ResponseT, ResponseT> responseListener;
-
-    // function pointer -> updateNetworkFromAddressBookAsync() from Client; it allows Executable to update the network
-    @VisibleForTesting
-    java.util.function.Function<Client, Client> networkUpdateHandler =
-        Client::updateNetworkFromAddressBook;
 
     Executable() {
         requestListener = request -> {
@@ -343,7 +332,7 @@ abstract class Executable<SdkRequestT, ProtoRequestT extends MessageLite, Respon
             if (delay > 0) {
                 if (logger.isEnabledForLevel(LogLevel.DEBUG)) {
                     logger.debug("Sleeping for: " + delay + " | Thread name: "
-                            + Thread.currentThread().getName());
+                        + Thread.currentThread().getName());
                 }
                 Thread.sleep(delay);
             }
@@ -401,7 +390,7 @@ abstract class Executable<SdkRequestT, ProtoRequestT extends MessageLite, Respon
                 throw new TimeoutException();
             }
 
-            GrpcRequest grpcRequest = new GrpcRequest(client, client.network, attempt, currentTimeout);
+            GrpcRequest grpcRequest = new GrpcRequest(client.network, attempt, currentTimeout);
             Node node = grpcRequest.getNode();
             ResponseT response = null;
 
@@ -414,6 +403,7 @@ abstract class Executable<SdkRequestT, ProtoRequestT extends MessageLite, Respon
             if (node.channelFailedToConnect(timeoutTime)) {
                 logger.trace("Failed to connect channel for node {} for request #{}", node.getAccountId(), attempt);
                 lastException = grpcRequest.reactToConnectionFailure();
+                advanceRequest(); // Advance to next node before retrying
                 continue;
             }
 
@@ -436,6 +426,7 @@ abstract class Executable<SdkRequestT, ProtoRequestT extends MessageLite, Respon
 
             if (response == null) {
                 if (grpcRequest.shouldRetryExceptionally(lastException)) {
+                    advanceRequest(); // Advance to next node before retrying
                     continue;
                 } else {
                     throw new RuntimeException(lastException);
@@ -444,11 +435,24 @@ abstract class Executable<SdkRequestT, ProtoRequestT extends MessageLite, Respon
 
             var status = mapResponseStatus(response);
             var executionState = getExecutionState(status, response);
-            grpcRequest.handleResponse(response, status, executionState);
+            grpcRequest.handleResponse(response, status, executionState, client);
 
             switch (executionState) {
                 case SERVER_ERROR:
                     lastException = grpcRequest.mapStatusException();
+                    advanceRequest(); // Advance to next node before retrying
+
+                    // Handle INVALID_NODE_ACCOUNT_ID after advancing (matches Go SDK's executionStateRetryWithAnotherNode)
+                    if (status == Status.INVALID_NODE_ACCOUNT_ID) {
+                        logger.trace(
+                            "Received INVALID_NODE_ACCOUNT_ID; updating address book and marking node {} as unhealthy, attempt #{}",
+                            node.getAccountId(),
+                            attempt);
+                        // Schedule async address book update (matches Go's defer client._UpdateAddressBook())
+                        client.updateNetworkFromAddressBook();
+                        // Mark this node as unhealthy
+                        client.network.increaseBackoff(node);
+                    }
                     continue;
                 case RETRY:
                     // Response is not ready yet from server, need to wait.
@@ -457,6 +461,7 @@ abstract class Executable<SdkRequestT, ProtoRequestT extends MessageLite, Respon
                         currentTimeout = Duration.between(Instant.now(), timeoutTime);
                         delay(Math.min(currentTimeout.toMillis(), grpcRequest.getDelay()));
                     }
+                    advanceRequest(); // Advance to next node before retrying
                     continue;
                 case REQUEST_ERROR:
                     throw grpcRequest.mapStatusException();
@@ -500,16 +505,16 @@ abstract class Executable<SdkRequestT, ProtoRequestT extends MessageLite, Respon
         mergeFromClient(client);
 
         onExecuteAsync(client)
-                .thenRun(() -> {
-                    checkNodeAccountIds();
-                    setNodesFromNodeAccountIds(client);
+            .thenRun(() -> {
+                checkNodeAccountIds();
+                setNodesFromNodeAccountIds(client);
 
-                    executeAsyncInternal(client, 1, null, retval, timeout);
-                })
-                .exceptionally(error -> {
-                    retval.completeExceptionally(error);
-                    return null;
-                });
+                executeAsyncInternal(client, 1, null, retval, timeout);
+            })
+            .exceptionally(error -> {
+                retval.completeExceptionally(error);
+                return null;
+            });
         return retval;
     }
 
@@ -569,25 +574,25 @@ abstract class Executable<SdkRequestT, ProtoRequestT extends MessageLite, Respon
      * @param error         the error if the transaction was not successful
      */
     protected void logTransaction(
-            TransactionId transactionId,
-            Client client,
-            Node node,
-            boolean isAsync,
-            int attempt,
-            @Nullable ResponseT response,
-            @Nullable Throwable error) {
+        TransactionId transactionId,
+        Client client,
+        Node node,
+        boolean isAsync,
+        int attempt,
+        @Nullable ResponseT response,
+        @Nullable Throwable error) {
 
         if (!logger.isEnabledForLevel(LogLevel.TRACE)) {
             return;
         }
 
         logger.trace(
-                "Execute{} Transaction ID: {}, submit to {}, node: {}, attempt: {}",
-                isAsync ? "Async" : "",
-                transactionId,
-                client.network,
-                node.getAccountId(),
-                attempt);
+            "Execute{} Transaction ID: {}, submit to {}, node: {}, attempt: {}",
+            isAsync ? "Async" : "",
+            transactionId,
+            client.network,
+            node.getAccountId(),
+            attempt);
 
         if (response != null) {
             logger.trace(" - Response: {}", response);
@@ -601,7 +606,6 @@ abstract class Executable<SdkRequestT, ProtoRequestT extends MessageLite, Respon
     @SuppressWarnings("java:S2245")
     @VisibleForTesting
     void setNodesFromNodeAccountIds(Client client) {
-        executingClient = client;
         nodes.clear();
 
         // When a single node is explicitly set we get all of its proxies so in case of
@@ -623,8 +627,8 @@ abstract class Executable<SdkRequestT, ProtoRequestT extends MessageLite, Respon
             @Nullable var nodeProxies = client.network.getNodeProxies(accountId);
             if (nodeProxies == null || nodeProxies.isEmpty()) {
                 logger.warn(
-                        "Attempting to fetch node {} proxy which is not included in the Client's network. Please review your Client config.",
-                        accountId.toString());
+                    "Attempting to fetch node {} proxy which is not included in the Client's network. Please review your Client config.",
+                    accountId.toString());
                 continue;
             }
 
@@ -691,20 +695,19 @@ abstract class Executable<SdkRequestT, ProtoRequestT extends MessageLite, Respon
     private ProtoRequestT getRequestForExecute() {
         var request = makeRequest();
 
-        // advance the internal index
-        // non-free queries and transactions map to more than 1 actual transaction and this will cause
-        // the next invocation of makeRequest to return the _next_ transaction
-        advanceRequest();
+        // NOTE: advanceRequest() is now called explicitly in the retry logic
+        // after we determine that a retry is needed, to match Go SDK behavior
+        // where node advancement happens AFTER error detection, not before
 
         return request;
     }
 
     private void executeAsyncInternal(
-            Client client,
-            int attempt,
-            @Nullable Throwable lastException,
-            CompletableFuture<O> returnFuture,
-            Duration timeout) {
+        Client client,
+        int attempt,
+        @Nullable Throwable lastException,
+        CompletableFuture<O> returnFuture,
+        Duration timeout) {
         // If the logger on the request is not set, use the logger in client
         // (if set, otherwise do not use logger)
         if (this.logger == null && client.getLogger() != null) {
@@ -717,119 +720,133 @@ abstract class Executable<SdkRequestT, ProtoRequestT extends MessageLite, Respon
 
         if (attempt > maxAttempts) {
             returnFuture.completeExceptionally(
-                    new CompletionException(new MaxAttemptsExceededException(lastException)));
+                new CompletionException(new MaxAttemptsExceededException(lastException)));
             return;
         }
 
         var timeoutTime = Instant.now().plus(timeout);
 
         GrpcRequest grpcRequest =
-                new GrpcRequest(client, client.network, attempt, Duration.between(Instant.now(), timeoutTime));
+            new GrpcRequest(client.network, attempt, Duration.between(Instant.now(), timeoutTime));
 
         Supplier<CompletableFuture<Void>> afterUnhealthyDelay = () -> {
             return grpcRequest.getNode().isHealthy()
-                    ? CompletableFuture.completedFuture((Void) null)
-                    : Delayer.delayFor(grpcRequest.getNode().getRemainingTimeForBackoff(), client.executor);
+                ? CompletableFuture.completedFuture((Void) null)
+                : Delayer.delayFor(grpcRequest.getNode().getRemainingTimeForBackoff(), client.executor);
         };
 
         afterUnhealthyDelay.get().thenRun(() -> {
             grpcRequest
-                    .getNode()
-                    .channelFailedToConnectAsync()
-                    .thenAccept(connectionFailed -> {
-                        if (connectionFailed) {
-                            var connectionException = grpcRequest.reactToConnectionFailure();
-                            executeAsyncInternal(
+                .getNode()
+                .channelFailedToConnectAsync()
+                .thenAccept(connectionFailed -> {
+                    if (connectionFailed) {
+                        var connectionException = grpcRequest.reactToConnectionFailure();
+                        advanceRequest(); // Advance to next node before retrying
+                        executeAsyncInternal(
+                            client,
+                            attempt + 1,
+                            connectionException,
+                            returnFuture,
+                            Duration.between(Instant.now(), timeoutTime));
+                        return;
+                    }
+
+                    toCompletableFuture(
+                        ClientCalls.futureUnaryCall(grpcRequest.createCall(), grpcRequest.getRequest()))
+                        .handle((response, error) -> {
+                            logTransaction(
+                                this.getTransactionIdInternal(),
+                                client,
+                                grpcRequest.getNode(),
+                                true,
+                                attempt,
+                                response,
+                                error);
+
+                            if (grpcRequest.shouldRetryExceptionally(error)) {
+                                // the transaction had a network failure reaching Hedera
+                                advanceRequest(); // Advance to next node before retrying
+                                executeAsyncInternal(
                                     client,
                                     attempt + 1,
-                                    connectionException,
+                                    error,
                                     returnFuture,
                                     Duration.between(Instant.now(), timeoutTime));
-                            return;
-                        }
+                                return null;
+                            }
 
-                        toCompletableFuture(
-                                        ClientCalls.futureUnaryCall(grpcRequest.createCall(), grpcRequest.getRequest()))
-                                .handle((response, error) -> {
-                                    logTransaction(
-                                            this.getTransactionIdInternal(),
+                            if (error != null) {
+                                // not a network failure, some other weirdness going on; just fail fast
+                                returnFuture.completeExceptionally(new CompletionException(error));
+                                return null;
+                            }
+
+                            var status = mapResponseStatus(response);
+                            var executionState = getExecutionState(status, response);
+                            grpcRequest.handleResponse(response, status, executionState, client);
+
+                            switch (executionState) {
+                                case SERVER_ERROR:
+                                    advanceRequest(); // Advance to next node before retrying
+
+                                    // Handle INVALID_NODE_ACCOUNT_ID after advancing (matches Go SDK's executionStateRetryWithAnotherNode)
+                                    if (status == Status.INVALID_NODE_ACCOUNT_ID) {
+                                        logger.trace(
+                                            "Received INVALID_NODE_ACCOUNT_ID; updating address book and marking node {} as unhealthy, attempt #{}",
+                                            grpcRequest.getNode().getAccountId(),
+                                            attempt);
+                                        // Schedule async address book update (matches Go's defer client._UpdateAddressBook())
+                                        client.updateNetworkFromAddressBook();
+                                        // Mark this node as unhealthy
+                                        client.network.increaseBackoff(grpcRequest.getNode());
+                                    }
+
+                                    executeAsyncInternal(
+                                        client,
+                                        attempt + 1,
+                                        grpcRequest.mapStatusException(),
+                                        returnFuture,
+                                        Duration.between(Instant.now(), timeoutTime));
+                                    break;
+                                case RETRY:
+                                    advanceRequest(); // Advance to next node before retrying
+                                    Delayer.delayFor(
+                                            (attempt < maxAttempts) ? grpcRequest.getDelay() : 0,
+                                            client.executor)
+                                        .thenRun(() -> executeAsyncInternal(
                                             client,
-                                            grpcRequest.getNode(),
-                                            true,
-                                            attempt,
-                                            response,
-                                            error);
-
-                                    if (grpcRequest.shouldRetryExceptionally(error)) {
-                                        // the transaction had a network failure reaching Hedera
-                                        executeAsyncInternal(
-                                                client,
-                                                attempt + 1,
-                                                error,
-                                                returnFuture,
-                                                Duration.between(Instant.now(), timeoutTime));
-                                        return null;
-                                    }
-
-                                    if (error != null) {
-                                        // not a network failure, some other weirdness going on; just fail fast
-                                        returnFuture.completeExceptionally(new CompletionException(error));
-                                        return null;
-                                    }
-
-                                    var status = mapResponseStatus(response);
-                                    var executionState = getExecutionState(status, response);
-                                    grpcRequest.handleResponse(response, status, executionState);
-
-                                    switch (executionState) {
-                                        case SERVER_ERROR:
-                                            executeAsyncInternal(
-                                                    client,
-                                                    attempt + 1,
-                                                    grpcRequest.mapStatusException(),
-                                                    returnFuture,
-                                                    Duration.between(Instant.now(), timeoutTime));
-                                            break;
-                                        case RETRY:
-                                            Delayer.delayFor(
-                                                            (attempt < maxAttempts) ? grpcRequest.getDelay() : 0,
-                                                            client.executor)
-                                                    .thenRun(() -> executeAsyncInternal(
-                                                            client,
-                                                            attempt + 1,
-                                                            grpcRequest.mapStatusException(),
-                                                            returnFuture,
-                                                            Duration.between(Instant.now(), timeoutTime)));
-                                            break;
-                                        case REQUEST_ERROR:
-                                            returnFuture.completeExceptionally(
-                                                    new CompletionException(grpcRequest.mapStatusException()));
-                                            break;
-                                        case SUCCESS:
-                                        default:
-                                            returnFuture.complete(grpcRequest.mapResponse());
-                                    }
-                                    return null;
-                                })
-                                .exceptionally(error -> {
-                                    returnFuture.completeExceptionally(error);
-                                    return null;
-                                });
-                    })
-                    .exceptionally(error -> {
-                        returnFuture.completeExceptionally(error);
-                        return null;
-                    });
+                                            attempt + 1,
+                                            grpcRequest.mapStatusException(),
+                                            returnFuture,
+                                            Duration.between(Instant.now(), timeoutTime)));
+                                    break;
+                                case REQUEST_ERROR:
+                                    returnFuture.completeExceptionally(
+                                        new CompletionException(grpcRequest.mapStatusException()));
+                                    break;
+                                case SUCCESS:
+                                default:
+                                    returnFuture.complete(grpcRequest.mapResponse());
+                            }
+                            return null;
+                        })
+                        .exceptionally(error -> {
+                            returnFuture.completeExceptionally(error);
+                            return null;
+                        });
+                })
+                .exceptionally(error -> {
+                    returnFuture.completeExceptionally(error);
+                    return null;
+                });
         });
     }
 
     abstract ProtoRequestT makeRequest();
 
-    // Creates a new grpc request for an attempt, passes the executing client and its network configuration; purpose: creating grpc requests
     GrpcRequest getGrpcRequest(int attempt) {
-
-        Network network = executingClient != null ? executingClient.network : null;
-        return new GrpcRequest(executingClient, network, attempt, this.grpcDeadline);
+        return new GrpcRequest(null, attempt, this.grpcDeadline);
     }
 
     void advanceRequest() {
@@ -864,10 +881,10 @@ abstract class Executable<SdkRequestT, ProtoRequestT extends MessageLite, Respon
             var description = statusException.getStatus().getDescription();
 
             return (status == Code.UNAVAILABLE)
-                    || (status == Code.RESOURCE_EXHAUSTED)
-                    || (status == Code.INTERNAL
-                            && description != null
-                            && RST_STREAM.matcher(description).matches());
+                || (status == Code.RESOURCE_EXHAUSTED)
+                || (status == Code.INTERNAL
+                && description != null
+                && RST_STREAM.matcher(description).matches());
         }
 
         return false;
@@ -883,8 +900,11 @@ abstract class Executable<SdkRequestT, ProtoRequestT extends MessageLite, Respon
             case PLATFORM_NOT_ACTIVE:
                 return ExecutionState.SERVER_ERROR;
             case BUSY:
-            case INVALID_ACCOUNT_ID:
                 return ExecutionState.RETRY;
+            case INVALID_NODE_ACCOUNT_ID:
+                // Matches Go SDK's executionStateRetryWithAnotherNode behavior:
+                // immediately retry with next node without delay
+                return ExecutionState.SERVER_ERROR;
             case OK:
                 return ExecutionState.SUCCESS;
             default:
@@ -896,8 +916,7 @@ abstract class Executable<SdkRequestT, ProtoRequestT extends MessageLite, Respon
     class GrpcRequest {
         @Nullable
         private final Network network;
-        @Nullable
-        private final Client client;
+
         private final Node node;
         private final int attempt;
         // private final ClientCall<ProtoRequestT, ResponseT> call;
@@ -909,9 +928,7 @@ abstract class Executable<SdkRequestT, ProtoRequestT extends MessageLite, Respon
         private double latency;
         private Status responseStatus;
 
-        // Pass client
-        GrpcRequest(@Nullable Client client, @Nullable Network network, int attempt, Duration grpcDeadline) {
-            this.client = client;
+        GrpcRequest(@Nullable Network network, int attempt, Duration grpcDeadline) {
             this.network = network;
             this.attempt = attempt;
             this.grpcDeadline = grpcDeadline;
@@ -921,8 +938,8 @@ abstract class Executable<SdkRequestT, ProtoRequestT extends MessageLite, Respon
 
             // Exponential back-off for Delayer: 250ms, 500ms, 1s, 2s, 4s, 8s, ... 8s
             delay = (long) Math.min(
-                    Objects.requireNonNull(minBackoff).toMillis() * Math.pow(2, attempt - 1.0),
-                    Objects.requireNonNull(maxBackoff).toMillis());
+                Objects.requireNonNull(minBackoff).toMillis() * Math.pow(2, attempt - 1.0),
+                Objects.requireNonNull(maxBackoff).toMillis());
         }
 
         public CallOptions getCallOptions() {
@@ -955,10 +972,10 @@ abstract class Executable<SdkRequestT, ProtoRequestT extends MessageLite, Respon
         Throwable reactToConnectionFailure() {
             Objects.requireNonNull(network).increaseBackoff(node);
             logger.warn(
-                    "Retrying in {} ms after channel connection failure with node {} during attempt #{}",
-                    node.getRemainingTimeForBackoff(),
-                    node.getAccountId(),
-                    attempt);
+                "Retrying in {} ms after channel connection failure with node {} during attempt #{}",
+                node.getRemainingTimeForBackoff(),
+                node.getAccountId(),
+                attempt);
             verboseLog(node);
             return new IllegalStateException("Failed to connect to node " + node.getAccountId());
         }
@@ -971,11 +988,11 @@ abstract class Executable<SdkRequestT, ProtoRequestT extends MessageLite, Respon
             if (retry) {
                 Objects.requireNonNull(network).increaseBackoff(node);
                 logger.warn(
-                        "Retrying in {} ms after failure with node {} during attempt #{}: {}",
-                        node.getRemainingTimeForBackoff(),
-                        node.getAccountId(),
-                        attempt,
-                        e != null ? e.getMessage() : "NULL");
+                    "Retrying in {} ms after failure with node {} during attempt #{}: {}",
+                    node.getRemainingTimeForBackoff(),
+                    node.getAccountId(),
+                    attempt,
+                    e != null ? e.getMessage() : "NULL");
                 verboseLog(node);
             }
 
@@ -992,28 +1009,23 @@ abstract class Executable<SdkRequestT, ProtoRequestT extends MessageLite, Respon
             return Executable.this.mapResponse(response, node.getAccountId(), request);
         }
 
-        // Keeps the response and the status; Add special handling in the RETRY execution state for INVALID_NODE_ACCOUNT_ID: mark the node as unusable by increasing it's backoff
-        void handleResponse(ResponseT response, Status status, ExecutionState executionState) {
-            //node.decreaseBackoff();
+        void handleResponse(ResponseT response, Status status, ExecutionState executionState, @Nullable Client client) {
+            // Note: For INVALID_NODE_ACCOUNT_ID, we don't mark the node as unhealthy here
+            // because we need to do it AFTER advancing the request, to match Go SDK behavior
+            if (status != Status.INVALID_NODE_ACCOUNT_ID) {
+                node.decreaseBackoff();
+            }
 
             this.response = Executable.this.responseListener.apply(response);
             this.responseStatus = status;
 
-            if (status == Status.INVALID_NODE_ACCOUNT_ID) {
-                markNodeAsUnhealthy();
-                refreshNetworkConfiguration(); // Refreshes the address book
-            } else {
-                node.decreaseBackoff();
-            }
-
-
             logger.trace(
-                    "Received {} response in {} s from node {} during attempt #{}: {}",
-                    responseStatus,
-                    latency,
-                    node.getAccountId(),
-                    attempt,
-                    response);
+                "Received {} response in {} s from node {} during attempt #{}: {}",
+                responseStatus,
+                latency,
+                node.getAccountId(),
+                attempt,
+                response);
 
             if (executionState == ExecutionState.SERVER_ERROR && attemptedAllNodes) {
                 executionState = ExecutionState.RETRY;
@@ -1021,54 +1033,29 @@ abstract class Executable<SdkRequestT, ProtoRequestT extends MessageLite, Respon
             }
             switch (executionState) {
                 case RETRY -> {
-                    if (status == Status.INVALID_NODE_ACCOUNT_ID) {
-                        logger.warn(
-                            "Encountered INVALID_NODE_ACCOUNT_ID for node {} during attempt #{}. Refreshing network configuration before retrying.",
-                            node.getAccountId(),
-                            attempt);
-                    } else {
-                        logger.warn(
-                            "Retrying in {} ms after failure with node {} during attempt #{}: {}",
-                            delay,
-                            node.getAccountId(),
-                            attempt,
-                            responseStatus);
-                    }
-                    verboseLog(node);
-                }
-                case SERVER_ERROR -> logger.warn(
-                        "Problem submitting request to node {} for attempt #{}, retry with new node: {}",
+                    logger.warn(
+                        "Retrying in {} ms after failure with node {} during attempt #{}: {}",
+                        delay,
                         node.getAccountId(),
                         attempt,
                         responseStatus);
+                    verboseLog(node);
+                }
+                case SERVER_ERROR -> {
+                    // Note: INVALID_NODE_ACCOUNT_ID is handled after advanceRequest() in execute methods
+                    // to match Go SDK's executionStateRetryWithAnotherNode behavior
+                    if (status != Status.INVALID_NODE_ACCOUNT_ID) {
+                        logger.warn(
+                            "Problem submitting request to node {} for attempt #{}, retry with new node: {}",
+                            node.getAccountId(),
+                            attempt,
+                            responseStatus);
+                        verboseLog(node);
+                    }
+                }
                 default -> {}
             }
         }
-
-        // mark the node as unusable by increasing it's backoff and removing it from the healthy nodes list
-        private void markNodeAsUnhealthy() {
-            if (network != null) {
-                network.increaseBackoff(node); // this node wont be selected in upcoming transactions
-            } else {
-                node.increaseBackoff();
-            }
-            verboseLog(node);
-        }
-
-        // update the client's network
-        private void refreshNetworkConfiguration() {
-            if (client == null) {
-                return;
-            }
-
-            try {
-                networkUpdateHandler.apply(client);
-                logger.info("Network refreshed synchronously after INVALID_NODE_ACCOUNT_ID");
-            } catch (Throwable error) {
-                logger.warn("Failed to refresh address book after INVALID_NODE_ACCOUNT_ID", error);
-            }
-        }
-
 
         void verboseLog(Node node) {
             String ipAddress;
@@ -1080,10 +1067,10 @@ abstract class Executable<SdkRequestT, ProtoRequestT extends MessageLite, Respon
                 ipAddress = node.address.getAddress();
             }
             logger.trace(
-                    "Node IP {} Timestamp {} Transaction Type {}",
-                    ipAddress,
-                    System.currentTimeMillis(),
-                    this.getClass().getSimpleName());
+                "Node IP {} Timestamp {} Transaction Type {}",
+                ipAddress,
+                System.currentTimeMillis(),
+                this.getClass().getSimpleName());
         }
     }
 }

@@ -96,14 +96,14 @@ public final class Client implements AutoCloseable {
      */
     @VisibleForTesting
     Client(
-            ExecutorService executor,
-            Network network,
-            MirrorNetwork mirrorNetwork,
-            @Nullable Duration networkUpdateInitialDelay,
-            boolean shouldShutdownExecutor,
-            @Nullable Duration networkUpdatePeriod,
-            long shard,
-            long realm) {
+        ExecutorService executor,
+        Network network,
+        MirrorNetwork mirrorNetwork,
+        @Nullable Duration networkUpdateInitialDelay,
+        boolean shouldShutdownExecutor,
+        @Nullable Duration networkUpdatePeriod,
+        long shard,
+        long realm) {
         this.executor = executor;
         this.network = network;
         this.mirrorNetwork = mirrorNetwork;
@@ -121,19 +121,19 @@ public final class Client implements AutoCloseable {
      */
     static ExecutorService createExecutor() {
         var threadFactory = new ThreadFactoryBuilder()
-                .setNameFormat("hedera-sdk-%d")
-                .setDaemon(true)
-                .build();
+            .setNameFormat("hedera-sdk-%d")
+            .setDaemon(true)
+            .build();
 
         int nThreads = Runtime.getRuntime().availableProcessors();
         return new ThreadPoolExecutor(
-                nThreads,
-                nThreads,
-                0L,
-                TimeUnit.MILLISECONDS,
-                new LinkedBlockingQueue<>(),
-                threadFactory,
-                new ThreadPoolExecutor.CallerRunsPolicy());
+            nThreads,
+            nThreads,
+            0L,
+            TimeUnit.MILLISECONDS,
+            new LinkedBlockingQueue<>(),
+            threadFactory,
+            new ThreadPoolExecutor.CallerRunsPolicy());
     }
 
     /**
@@ -205,7 +205,7 @@ public final class Client implements AutoCloseable {
      * @return
      */
     public static Client forMirrorNetwork(List<String> mirrorNetworkList)
-            throws InterruptedException, TimeoutException {
+        throws InterruptedException, TimeoutException {
         return forMirrorNetwork(mirrorNetworkList, 0, 0);
     }
 
@@ -218,14 +218,14 @@ public final class Client implements AutoCloseable {
      * @return
      */
     public static Client forMirrorNetwork(List<String> mirrorNetworkList, long shard, long realm)
-            throws InterruptedException, TimeoutException {
+        throws InterruptedException, TimeoutException {
         var executor = createExecutor();
         var network = Network.forNetwork(executor, new HashMap<>());
         var mirrorNetwork = MirrorNetwork.forNetwork(executor, mirrorNetworkList);
         var client = new Client(executor, network, mirrorNetwork, null, true, null, shard, realm);
         var addressBook = new AddressBookQuery()
-                .setFileId(FileId.getAddressBookFileIdFor(shard, realm))
-                .execute(client);
+            .setFileId(FileId.getAddressBookFileIdFor(shard, realm))
+            .execute(client);
         client.setNetworkFromAddressBook(addressBook);
         return client;
     }
@@ -257,14 +257,14 @@ public final class Client implements AutoCloseable {
         var mirrorNetwork = MirrorNetwork.forMainnet(executor);
 
         return new Client(
-                executor,
-                network,
-                mirrorNetwork,
-                NETWORK_UPDATE_INITIAL_DELAY,
-                false,
-                DEFAULT_NETWORK_UPDATE_PERIOD,
-                0,
-                0);
+            executor,
+            network,
+            mirrorNetwork,
+            NETWORK_UPDATE_INITIAL_DELAY,
+            false,
+            DEFAULT_NETWORK_UPDATE_PERIOD,
+            0,
+            0);
     }
 
     /**
@@ -279,14 +279,14 @@ public final class Client implements AutoCloseable {
         var mirrorNetwork = MirrorNetwork.forTestnet(executor);
 
         return new Client(
-                executor,
-                network,
-                mirrorNetwork,
-                NETWORK_UPDATE_INITIAL_DELAY,
-                false,
-                DEFAULT_NETWORK_UPDATE_PERIOD,
-                0,
-                0);
+            executor,
+            network,
+            mirrorNetwork,
+            NETWORK_UPDATE_INITIAL_DELAY,
+            false,
+            DEFAULT_NETWORK_UPDATE_PERIOD,
+            0,
+            0);
     }
 
     /**
@@ -302,14 +302,14 @@ public final class Client implements AutoCloseable {
         var mirrorNetwork = MirrorNetwork.forPreviewnet(executor);
 
         return new Client(
-                executor,
-                network,
-                mirrorNetwork,
-                NETWORK_UPDATE_INITIAL_DELAY,
-                false,
-                DEFAULT_NETWORK_UPDATE_PERIOD,
-                0,
-                0);
+            executor,
+            network,
+            mirrorNetwork,
+            NETWORK_UPDATE_INITIAL_DELAY,
+            false,
+            DEFAULT_NETWORK_UPDATE_PERIOD,
+            0,
+            0);
     }
 
     /**
@@ -324,14 +324,14 @@ public final class Client implements AutoCloseable {
         var mirrorNetwork = MirrorNetwork.forMainnet(executor);
 
         return new Client(
-                executor,
-                network,
-                mirrorNetwork,
-                NETWORK_UPDATE_INITIAL_DELAY,
-                true,
-                DEFAULT_NETWORK_UPDATE_PERIOD,
-                0,
-                0);
+            executor,
+            network,
+            mirrorNetwork,
+            NETWORK_UPDATE_INITIAL_DELAY,
+            true,
+            DEFAULT_NETWORK_UPDATE_PERIOD,
+            0,
+            0);
     }
 
     /**
@@ -346,14 +346,14 @@ public final class Client implements AutoCloseable {
         var mirrorNetwork = MirrorNetwork.forTestnet(executor);
 
         return new Client(
-                executor,
-                network,
-                mirrorNetwork,
-                NETWORK_UPDATE_INITIAL_DELAY,
-                true,
-                DEFAULT_NETWORK_UPDATE_PERIOD,
-                0,
-                0);
+            executor,
+            network,
+            mirrorNetwork,
+            NETWORK_UPDATE_INITIAL_DELAY,
+            true,
+            DEFAULT_NETWORK_UPDATE_PERIOD,
+            0,
+            0);
     }
 
     /**
@@ -369,14 +369,14 @@ public final class Client implements AutoCloseable {
         var mirrorNetwork = MirrorNetwork.forPreviewnet(executor);
 
         return new Client(
-                executor,
-                network,
-                mirrorNetwork,
-                NETWORK_UPDATE_INITIAL_DELAY,
-                true,
-                DEFAULT_NETWORK_UPDATE_PERIOD,
-                0,
-                0);
+            executor,
+            network,
+            mirrorNetwork,
+            NETWORK_UPDATE_INITIAL_DELAY,
+            true,
+            DEFAULT_NETWORK_UPDATE_PERIOD,
+            0,
+            0);
     }
 
     /**
@@ -405,8 +405,8 @@ public final class Client implements AutoCloseable {
         Map<String, AccountId> nodes = new HashMap<>(networks.size());
         for (Map.Entry<String, JsonElement> entry : networks.entrySet()) {
             nodes.put(
-                    entry.getValue().toString().replace("\"", ""),
-                    AccountId.fromString(entry.getKey().replace("\"", "")));
+                entry.getValue().toString().replace("\"", ""),
+                AccountId.fromString(entry.getKey().replace("\"", "")));
         }
         return nodes;
     }
@@ -486,20 +486,20 @@ public final class Client implements AutoCloseable {
                 var fileId = FileId.getAddressBookFileIdFor(this.shard, this.realm);
 
                 new AddressBookQuery()
-                        .setFileId(fileId)
-                        .executeAsync(this)
-                        .thenCompose(addressBook -> requireNetworkUpdatePeriodNotNull(() -> {
-                            try {
-                                this.setNetworkFromAddressBook(addressBook);
-                            } catch (Throwable error) {
-                                return CompletableFuture.failedFuture(error);
-                            }
-                            return CompletableFuture.completedFuture(null);
-                        }))
-                        .exceptionally(error -> {
-                            logger.warn("Failed to update address book via mirror node query ", error);
-                            return null;
-                        });
+                    .setFileId(fileId)
+                    .executeAsync(this)
+                    .thenCompose(addressBook -> requireNetworkUpdatePeriodNotNull(() -> {
+                        try {
+                            this.setNetworkFromAddressBook(addressBook);
+                        } catch (Throwable error) {
+                            return CompletableFuture.failedFuture(error);
+                        }
+                        return CompletableFuture.completedFuture(null);
+                    }))
+                    .exceptionally(error -> {
+                        logger.warn("Failed to update address book via mirror node query ", error);
+                        return null;
+                    });
 
                 scheduleNetworkUpdate(networkUpdatePeriod);
                 return null;
@@ -532,33 +532,12 @@ public final class Client implements AutoCloseable {
     /**
      * Replace all nodes in this Client with the nodes in the Address Book
      * and update the address book if necessary.
+     *
+     * @param addressBook A list of nodes and their metadata
      * @return {@code this}
      */
-
-    //initiate addressbook query and update the client's network, this will make the SDK client has the latest node account ids for any subsequent transactions
-    public synchronized Client updateNetworkFromAddressBook() {
-        var fileId = FileId.getAddressBookFileIdFor(this.shard, this.realm); // gets the file where the address book is
-        try {
-            var addressBook = new AddressBookQuery()
-                .setFileId(fileId)
-                .execute(this); // блокира докато mirror node не върне резултат
-
-            this.setNetworkFromAddressBook(addressBook);
-            logger.info("Network updated from address book synchronously.");
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            logger.warn("Interrupted while updating network", e);
-        } catch (TimeoutException e) {
-            logger.warn("Timeout while updating network", e);
-        } catch (Exception e) {
-            logger.warn("Failed to update network from address book", e);
-        }
-
-        return this;
-    }
-
     public synchronized Client setNetworkFromAddressBook(NodeAddressBook addressBook)
-            throws InterruptedException, TimeoutException {
+        throws InterruptedException, TimeoutException {
         network.setNetwork(Network.addressBookToNetwork(addressBook.nodeAddresses));
         network.setAddressBook(addressBook);
         return this;
@@ -582,7 +561,7 @@ public final class Client implements AutoCloseable {
      * @throws InterruptedException when a thread is interrupted while it's waiting, sleeping, or otherwise occupied
      */
     public synchronized Client setNetwork(Map<String, AccountId> network)
-            throws InterruptedException, TimeoutException {
+        throws InterruptedException, TimeoutException {
         this.network.setNetwork(network);
         return this;
     }
@@ -678,9 +657,9 @@ public final class Client implements AutoCloseable {
      */
     public Void ping(AccountId nodeAccountId, Duration timeout) throws PrecheckStatusException, TimeoutException {
         new AccountBalanceQuery()
-                .setAccountId(nodeAccountId)
-                .setNodeAccountIds(Collections.singletonList(nodeAccountId))
-                .execute(this, timeout);
+            .setAccountId(nodeAccountId)
+            .setNodeAccountIds(Collections.singletonList(nodeAccountId))
+            .execute(this, timeout);
 
         return null;
     }
@@ -705,16 +684,16 @@ public final class Client implements AutoCloseable {
     public CompletableFuture<Void> pingAsync(AccountId nodeAccountId, Duration timeout) {
         var result = new CompletableFuture<Void>();
         new AccountBalanceQuery()
-                .setAccountId(nodeAccountId)
-                .setNodeAccountIds(Collections.singletonList(nodeAccountId))
-                .executeAsync(this, timeout)
-                .whenComplete((balance, error) -> {
-                    if (error == null) {
-                        result.complete(null);
-                    } else {
-                        result.completeExceptionally(error);
-                    }
-                });
+            .setAccountId(nodeAccountId)
+            .setNodeAccountIds(Collections.singletonList(nodeAccountId))
+            .executeAsync(this, timeout)
+            .whenComplete((balance, error) -> {
+                if (error == null) {
+                    result.complete(null);
+                } else {
+                    result.completeExceptionally(error);
+                }
+            });
         return result;
     }
 
@@ -759,7 +738,7 @@ public final class Client implements AutoCloseable {
      * @param onFailure     a Consumer which consumes the error on failure.
      */
     public void pingAsync(
-            AccountId nodeAccountId, Duration timeout, Consumer<Void> onSuccess, Consumer<Throwable> onFailure) {
+        AccountId nodeAccountId, Duration timeout, Consumer<Void> onSuccess, Consumer<Throwable> onFailure) {
         ConsumerHelper.twoConsumers(pingAsync(nodeAccountId, timeout), onSuccess, onFailure);
     }
 
@@ -816,7 +795,7 @@ public final class Client implements AutoCloseable {
         }
 
         return CompletableFuture.allOf(list.toArray(new CompletableFuture<?>[0]))
-                .thenApply((v) -> null);
+            .thenApply((v) -> null);
     }
 
     /**
@@ -893,14 +872,14 @@ public final class Client implements AutoCloseable {
      * @return {@code this}
      */
     public synchronized Client setOperatorWith(
-            AccountId accountId, PublicKey publicKey, UnaryOperator<byte[]> transactionSigner) {
+        AccountId accountId, PublicKey publicKey, UnaryOperator<byte[]> transactionSigner) {
         if (getNetworkName() != null) {
             try {
                 accountId.validateChecksum(this);
             } catch (BadEntityIdException exc) {
                 throw new IllegalArgumentException(
-                        "Tried to set the client operator account ID to an account ID with an invalid checksum: "
-                                + exc.getMessage());
+                    "Tried to set the client operator account ID to an account ID with an invalid checksum: "
+                        + exc.getMessage());
             }
         }
 
@@ -1425,6 +1404,18 @@ public final class Client implements AutoCloseable {
         return this;
     }
 
+    /**
+     * Trigger an immediate address book update to refresh the client's network with the latest node information.
+     * This is useful when encountering INVALID_NODE_ACCOUNT_ID errors to ensure subsequent transactions
+     * use the correct node account IDs.
+     *
+     * @return {@code this}
+     */
+    public synchronized Client updateNetworkFromAddressBook() {
+        scheduleNetworkUpdate(Duration.ZERO);
+        return this;
+    }
+
     public Logger getLogger() {
         return this.logger;
     }
@@ -1603,7 +1594,7 @@ public final class Client implements AutoCloseable {
                     client.setNetworkName(NetworkName.fromString(networkNameString));
                 } catch (Exception ignored) {
                     throw new IllegalArgumentException("networkName in config was \"" + networkNameString
-                            + "\", expected either \"mainnet\", \"testnet\" or \"previewnet\"");
+                        + "\", expected either \"mainnet\", \"testnet\" or \"previewnet\"");
                 }
             }
         }
