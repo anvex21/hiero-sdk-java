@@ -542,7 +542,6 @@ class ExecutableTest {
         var tx = new DummyTransaction() {
             @Override
             Status mapResponseStatus(com.hedera.hashgraph.sdk.proto.TransactionResponse response) {
-                //return Status.INVALID_NODE_ACCOUNT_ID;
                 return Status.INVALID_NODE_ACCOUNT;
             }
         };
@@ -550,16 +549,15 @@ class ExecutableTest {
         tx.setNodeAccountIds(nodeAccountIds);
 
         var txResp = com.hedera.hashgraph.sdk.proto.TransactionResponse.newBuilder()
-            //.setNodeTransactionPrecheckCode(ResponseCodeEnum.INVALID_NODE_ACCOUNT_ID)
             .setNodeTransactionPrecheckCode(ResponseCodeEnum.INVALID_NODE_ACCOUNT)
             .build();
 
         tx.blockingUnaryCall = (grpcRequest) -> txResp;
 
-        // This should retry with a different node due to INVALID_NODE_ACCOUNT_ID
+        // This should retry with a different node due to INVALID_NODE_ACCOUNT
         assertThatExceptionOfType(MaxAttemptsExceededException.class).isThrownBy(() -> tx.execute(client));
 
-        // Verify that increaseBackoff was called on the network for each node that returned INVALID_NODE_ACCOUNT_ID
+        // Verify that increaseBackoff was called on the network for each node that returned INVALID_NODE_ACCOUNT
         verify(network, atLeastOnce()).increaseBackoff(any(Node.class));
     }
 
@@ -571,7 +569,6 @@ class ExecutableTest {
         var tx = new DummyTransaction() {
             @Override
             Status mapResponseStatus(com.hedera.hashgraph.sdk.proto.TransactionResponse response) {
-                // return Status.INVALID_NODE_ACCOUNT_ID;
                 return Status.INVALID_NODE_ACCOUNT;
             }
         };
@@ -579,13 +576,12 @@ class ExecutableTest {
         tx.setNodeAccountIds(nodeAccountIds);
 
         var txResp = com.hedera.hashgraph.sdk.proto.TransactionResponse.newBuilder()
-            //.setNodeTransactionPrecheckCode(ResponseCodeEnum.INVALID_NODE_ACCOUNT_ID)
             .setNodeTransactionPrecheckCode(ResponseCodeEnum.INVALID_NODE_ACCOUNT)
             .build();
 
         tx.blockingUnaryCall = (grpcRequest) -> txResp;
 
-        // This should trigger address book update due to INVALID_NODE_ACCOUNT_ID
+        // This should trigger address book update due to INVALID_NODE_ACCOUNT
         assertThatExceptionOfType(MaxAttemptsExceededException.class).isThrownBy(() -> tx.execute(client));
 
         // Verify that increaseBackoff was called (node marking)
