@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 package com.hedera.hashgraph.sdk;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -22,9 +23,9 @@ import org.junit.jupiter.api.Test;
 class FeeEstimateQueryMockTest {
 
     private static final com.hedera.hashgraph.sdk.proto.Transaction DUMMY_TRANSACTION =
-        com.hedera.hashgraph.sdk.proto.Transaction.newBuilder()
-            .setSignedTransactionBytes(ByteString.copyFromUtf8("dummy"))
-            .build();
+            com.hedera.hashgraph.sdk.proto.Transaction.newBuilder()
+                    .setSignedTransactionBytes(ByteString.copyFromUtf8("dummy"))
+                    .build();
 
     private Client client;
     private FeeEstimateServiceStub feeEstimateServiceStub;
@@ -42,10 +43,10 @@ class FeeEstimateQueryMockTest {
 
         feeEstimateServiceStub = new FeeEstimateServiceStub();
         server = InProcessServerBuilder.forName(serverName) // FIX: unique name here
-            .addService(feeEstimateServiceStub)
-            .directExecutor()
-            .build()
-            .start();
+                .addService(feeEstimateServiceStub)
+                .directExecutor()
+                .build()
+                .start();
 
         query = new FeeEstimateQuery();
     }
@@ -67,19 +68,17 @@ class FeeEstimateQueryMockTest {
 
     @Test
     @DisplayName(
-        "Given a FeeEstimateQuery is executed when the Mirror service is unavailable, when the query is executed, then it retries according to the existing query retry policy for UNAVAILABLE errors")
+            "Given a FeeEstimateQuery is executed when the Mirror service is unavailable, when the query is executed, then it retries according to the existing query retry policy for UNAVAILABLE errors")
     void retriesOnUnavailableErrors() {
-        query.setTransaction(DUMMY_TRANSACTION)
-            .setMaxAttempts(3)
-            .setMaxBackoff(Duration.ofMillis(500));
+        query.setTransaction(DUMMY_TRANSACTION).setMaxAttempts(3).setMaxBackoff(Duration.ofMillis(500));
 
         var expectedRequest = com.hedera.hashgraph.sdk.proto.mirror.FeeEstimateQuery.newBuilder()
-            .setModeValue(FeeEstimateMode.STATE.code)
-            .setTransaction(DUMMY_TRANSACTION)
-            .build();
+                .setModeValue(FeeEstimateMode.STATE.code)
+                .setTransaction(DUMMY_TRANSACTION)
+                .build();
 
         feeEstimateServiceStub.enqueueError(
-            expectedRequest, Status.UNAVAILABLE.withDescription("transient").asRuntimeException());
+                expectedRequest, Status.UNAVAILABLE.withDescription("transient").asRuntimeException());
         feeEstimateServiceStub.enqueue(expectedRequest, newSuccessResponse(FeeEstimateMode.STATE, 2, 6, 8));
 
         var response = query.execute(client);
@@ -91,19 +90,18 @@ class FeeEstimateQueryMockTest {
 
     @Test
     @DisplayName(
-        "Given a FeeEstimateQuery times out, when the query is executed, then it retries according to the existing query retry policy for DEADLINE_EXCEEDED errors")
+            "Given a FeeEstimateQuery times out, when the query is executed, then it retries according to the existing query retry policy for DEADLINE_EXCEEDED errors")
     void retriesOnDeadlineExceededErrors() {
-        query.setTransaction(DUMMY_TRANSACTION)
-            .setMaxAttempts(3)
-            .setMaxBackoff(Duration.ofMillis(500));
+        query.setTransaction(DUMMY_TRANSACTION).setMaxAttempts(3).setMaxBackoff(Duration.ofMillis(500));
 
         var expectedRequest = com.hedera.hashgraph.sdk.proto.mirror.FeeEstimateQuery.newBuilder()
-            .setModeValue(FeeEstimateMode.STATE.code)
-            .setTransaction(DUMMY_TRANSACTION)
-            .build();
+                .setModeValue(FeeEstimateMode.STATE.code)
+                .setTransaction(DUMMY_TRANSACTION)
+                .build();
 
         feeEstimateServiceStub.enqueueError(
-            expectedRequest, Status.DEADLINE_EXCEEDED.withDescription("timeout").asRuntimeException());
+                expectedRequest,
+                Status.DEADLINE_EXCEEDED.withDescription("timeout").asRuntimeException());
         feeEstimateServiceStub.enqueue(expectedRequest, newSuccessResponse(FeeEstimateMode.STATE, 4, 8, 20));
 
         var response = query.execute(client);
@@ -114,41 +112,40 @@ class FeeEstimateQueryMockTest {
     }
 
     private static com.hedera.hashgraph.sdk.proto.mirror.FeeEstimateResponse newSuccessResponse(
-        FeeEstimateMode mode, int networkMultiplier, long nodeBase, long serviceBase) {
+            FeeEstimateMode mode, int networkMultiplier, long nodeBase, long serviceBase) {
         long networkSubtotal = nodeBase * networkMultiplier;
         long total = networkSubtotal + nodeBase + serviceBase;
         return com.hedera.hashgraph.sdk.proto.mirror.FeeEstimateResponse.newBuilder()
-            .setModeValue(mode.code)
-            .setNetwork(com.hedera.hashgraph.sdk.proto.mirror.NetworkFee.newBuilder()
-                .setMultiplier(networkMultiplier)
-                .setSubtotal(networkSubtotal)
-                .build())
-            .setNode(com.hedera.hashgraph.sdk.proto.mirror.FeeEstimate.newBuilder()
-                .setBase(nodeBase)
-                .build())
-            .setService(com.hedera.hashgraph.sdk.proto.mirror.FeeEstimate.newBuilder()
-                .setBase(serviceBase)
-                .build())
-            .setTotal(total)
-            .build();
+                .setModeValue(mode.code)
+                .setNetwork(com.hedera.hashgraph.sdk.proto.mirror.NetworkFee.newBuilder()
+                        .setMultiplier(networkMultiplier)
+                        .setSubtotal(networkSubtotal)
+                        .build())
+                .setNode(com.hedera.hashgraph.sdk.proto.mirror.FeeEstimate.newBuilder()
+                        .setBase(nodeBase)
+                        .build())
+                .setService(com.hedera.hashgraph.sdk.proto.mirror.FeeEstimate.newBuilder()
+                        .setBase(serviceBase)
+                        .build())
+                .setTotal(total)
+                .build();
     }
 
     private static class FeeEstimateServiceStub extends NetworkServiceGrpc.NetworkServiceImplBase {
         private final Queue<com.hedera.hashgraph.sdk.proto.mirror.FeeEstimateQuery> expectedRequests =
-            new ArrayDeque<>();
+                new ArrayDeque<>();
         private final Queue<Object> responses = new ArrayDeque<>();
         private int observedRequests = 0;
 
         void enqueue(
-            com.hedera.hashgraph.sdk.proto.mirror.FeeEstimateQuery request,
-            com.hedera.hashgraph.sdk.proto.mirror.FeeEstimateResponse response) {
+                com.hedera.hashgraph.sdk.proto.mirror.FeeEstimateQuery request,
+                com.hedera.hashgraph.sdk.proto.mirror.FeeEstimateResponse response) {
             expectedRequests.add(request);
             responses.add(response);
         }
 
         void enqueueError(
-            com.hedera.hashgraph.sdk.proto.mirror.FeeEstimateQuery request,
-            StatusRuntimeException error) {
+                com.hedera.hashgraph.sdk.proto.mirror.FeeEstimateQuery request, StatusRuntimeException error) {
             expectedRequests.add(request);
             responses.add(error);
         }
@@ -164,19 +161,19 @@ class FeeEstimateQueryMockTest {
 
         @Override
         public void getFeeEstimate(
-            com.hedera.hashgraph.sdk.proto.mirror.FeeEstimateQuery request,
-            StreamObserver<com.hedera.hashgraph.sdk.proto.mirror.FeeEstimateResponse> responseObserver) {
+                com.hedera.hashgraph.sdk.proto.mirror.FeeEstimateQuery request,
+                StreamObserver<com.hedera.hashgraph.sdk.proto.mirror.FeeEstimateResponse> responseObserver) {
             observedRequests++;
             var expected = expectedRequests.poll();
             assertThat(expected)
-                .as("expected request to be queued before invoking getFeeEstimate")
-                .isNotNull();
+                    .as("expected request to be queued before invoking getFeeEstimate")
+                    .isNotNull();
             assertThat(request).isEqualTo(expected);
 
             var response = responses.poll();
             assertThat(response)
-                .as("response or error should be queued before invoking getFeeEstimate")
-                .isNotNull();
+                    .as("response or error should be queued before invoking getFeeEstimate")
+                    .isNotNull();
 
             if (response instanceof StatusRuntimeException error) {
                 responseObserver.onError(error);
