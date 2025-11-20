@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-package com.hedera.hashgraph.tck.methods.sdk.param.file;
+package com.hedera.hashgraph.tck.methods.sdk.param.schedule;
 
 import com.hedera.hashgraph.tck.methods.JSONRPC2Param;
 import com.hedera.hashgraph.tck.methods.sdk.param.CommonTransactionParams;
@@ -11,23 +11,23 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 /**
- * FileDeleteParams for file delete method
+ * ScheduleDeleteParams for delete schedule method
  */
 @SuppressWarnings("OptionalUsedAsFieldOrParameterType")
 @Getter
 @AllArgsConstructor
 @NoArgsConstructor
-public class FileDeleteParams extends JSONRPC2Param {
-    private Optional<String> fileId;
+public class ScheduleDeleteParams extends JSONRPC2Param {
+    private Optional<String> scheduleId;
     private Optional<CommonTransactionParams> commonTransactionParams;
     private String sessionId;
 
     @Override
-    public FileDeleteParams parse(Map<String, Object> jrpcParams) throws Exception {
-        var parsedFileId = Optional.ofNullable((String) jrpcParams.get("fileId"));
+    public ScheduleDeleteParams parse(Map<String, Object> jrpcParams) throws Exception {
+        var parsedScheduleId = Optional.ofNullable((String) jrpcParams.get("scheduleId"));
         var parsedCommonTransactionParams = JSONRPCParamParser.parseCommonTransactionParams(jrpcParams);
 
-        return new FileDeleteParams(
-                parsedFileId, parsedCommonTransactionParams, JSONRPCParamParser.parseSessionId(jrpcParams));
+        return new ScheduleDeleteParams(
+                parsedScheduleId, parsedCommonTransactionParams, JSONRPCParamParser.parseSessionId(jrpcParams));
     }
 }
