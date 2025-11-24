@@ -3,8 +3,13 @@ package com.hedera.hashgraph.sdk;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.esaulpaugh.headlong.rlp.RLPDecoder;
+import com.esaulpaugh.headlong.rlp.RLPEncoder;
+import com.esaulpaugh.headlong.util.Integers;
 import org.bouncycastle.util.encoders.Hex;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
 
 public class EthereumTransactionDataLegacyTest {
     // https://github.com/hashgraph/hedera-services/blob/1e01d9c6b8923639b41359c55413640b589c4ec7/hapi-utils/src/test/java/com/hedera/services/ethereum/EthTxDataTest.java#L49
@@ -59,5 +64,72 @@ public class EthereumTransactionDataLegacyTest {
                 .isEqualTo("df48f2efd10421811de2bfb125ab75b2d3c44139c4642837fb1fccce911fd479");
         assertThat(Hex.toHexString(data.s))
                 .isEqualTo("1aaf7ae92bee896651dfc9d99ae422a296bf5d9f1ca49b2d96d82b79eb112d66");
+    }
+
+    @Test
+    public void eip7702ToFromBytes() {
+        var chainId = Hex.decode("012a");
+        var nonce = Hex.decode("02");
+        var maxPriorityGas = Hex.decode("2f");
+        var maxGas = Hex.decode("2f");
+        var gasLimit = Hex.decode("018000");
+        var to = Hex.decode("7e3a9eaf9bcc39e2ffa38eb30bf7a93feacbc181");
+        var value = Hex.decode("0de0b6b3a7640000");
+        var callData = Hex.decode("123456");
+        var accessListElements = List.of();
+        var authorizationListElements =
+            List.of(
+                List.of(
+                    chainId,
+                    Hex.decode("0000000000000000000000000000000000000001"),
+                    Hex.decode("01"),
+                    Hex.decode("01"),
+                    Hex.decode("0000000000000000000000000000000000000000000000000000000000000001"),
+                    Hex.decode("0000000000000000000000000000000000000000000000000000000000000002")));
+        var accessList = RLPDecoder.RLP_STRICT.wrapList(RLPEncoder.list(accessListElements));
+        var authorizationList =
+            RLPDecoder.RLP_STRICT.wrapList(RLPEncoder.list(authorizationListElements));
+        var recoveryId = Hex.decode("01");
+        var r = Hex.decode("df48f2efd10421811de2bfb125ab75b2d3c44139c4642837fb1fccce911fd479");
+        var s = Hex.decode("1aaf7ae92bee896651dfc9d99ae422a296bf5d9f1ca49b2d96d82b79eb112d66");
+
+        var rawBytes =
+            RLPEncoder.sequence(
+                Integers.toBytes(0x04),
+                List.of(
+                    chainId,
+                    nonce,
+                    maxPriorityGas,
+                    maxGas,
+                    gasLimit,
+                    to,
+                    value,
+                    callData,
+                    accessListElements,
+                    authorizationListElements,
+                    recoveryId,
+                    r,
+                    s));
+
+        var data = (EthereumTransactionDataEip7702) EthereumTransactionData.fromBytes(rawBytes);
+
+        assertThat(Hex.toHexString(rawBytes)).isEqualTo(Hex.toHexString(data.toBytes()));
+
+        assertThat(Hex.toHexString(data.chainId)).isEqualTo("012a");
+        assertThat(Hex.toHexString(data.nonce)).isEqualTo("02");
+        assertThat(Hex.toHexString(data.maxPriorityGas)).isEqualTo("2f");
+        assertThat(Hex.toHexString(data.maxGas)).isEqualTo("2f");
+        assertThat(Hex.toHexString(data.gasLimit)).isEqualTo("018000");
+        assertThat(Hex.toHexString(data.to)).isEqualTo("7e3a9eaf9bcc39e2ffa38eb30bf7a93feacbc181");
+        assertThat(Hex.toHexString(data.value)).isEqualTo("0de0b6b3a7640000");
+        assertThat(Hex.toHexString(data.callData)).isEqualTo("123456");
+        assertThat(Hex.toHexString(data.accessList.encoding())).isEqualTo(Hex.toHexString(accessList.encoding()));
+        assertThat(Hex.toHexString(data.authorizationList.encoding()))
+            .isEqualTo(Hex.toHexString(authorizationList.encoding()));
+        assertThat(Hex.toHexString(data.recoveryId)).isEqualTo("01");
+        assertThat(Hex.toHexString(data.r))
+            .isEqualTo("df48f2efd10421811de2bfb125ab75b2d3c44139c4642837fb1fccce911fd479");
+        assertThat(Hex.toHexString(data.s))
+            .isEqualTo("1aaf7ae92bee896651dfc9d99ae422a296bf5d9f1ca49b2d96d82b79eb112d66");
     }
 }
