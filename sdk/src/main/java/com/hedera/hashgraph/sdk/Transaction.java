@@ -44,6 +44,22 @@ public abstract class Transaction<T extends Transaction<T>>
             TransactionId.withValidStart(DUMMY_ACCOUNT_ID, Instant.EPOCH);
 
     /**
+     * Standard transaction size limit enforced by the network.
+     */
+    private static final int STANDARD_TRANSACTION_SIZE_LIMIT = 6 * 1024;
+
+    /**
+     * Extended transaction size limit granted to privileged governance accounts.
+     */
+    private static final int EXTENDED_TRANSACTION_SIZE_LIMIT = 130 * 1024;
+
+    /**
+     * Accounts that are allowed to submit extended size transactions.
+     */
+    private static final Set<AccountId> PRIVILEGED_TRANSACTION_PAYERS =
+        Set.of(AccountId.fromString("0.0.2"), AccountId.fromString("0.0.50"));
+
+    /**
      * Default transaction duration
      */
     private static final Duration DEFAULT_TRANSACTION_VALID_DURATION = Duration.ofSeconds(120);
@@ -1401,6 +1417,7 @@ public abstract class Transaction<T extends Transaction<T>>
                                 .build()
                                 .toByteString())
                         .build());
+        validateTransactionSize(index);
     }
 
     /**
@@ -1572,6 +1589,20 @@ public abstract class Transaction<T extends Transaction<T>>
         }
 
         return 0;
+    }
+
+    private void validateTransactionSize(int index) {
+        var payer = Objects.requireNonNull(getTransactionIdInternal().accountId);
+        var sizeLimit = PRIVILEGED_TRANSACTION_PAYERS.contains(payer)
+            ? EXTENDED_TRANSACTION_SIZE_LIMIT
+            : STANDARD_TRANSACTION_SIZE_LIMIT;
+        var transactionSize = outerTransactions.get(index).getSerializedSize();
+
+        if (transactionSize > sizeLimit) {
+            throw new IllegalStateException(String.format(
+                "Transaction size of %d bytes exceeds the allowed limit of %d bytes for payer %s.",
+                transactionSize, sizeLimit, payer));
+        }
     }
 
     public static class SignableNodeTransactionBodyBytes {
